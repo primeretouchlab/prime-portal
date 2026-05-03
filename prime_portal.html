@@ -1036,9 +1036,32 @@ function delBatch(i){tmpBatches.splice(i,1);renderBList();}
 // ════════════════════════════════════
 // PORTAL
 // ════════════════════════════════════
-function pUrl(id){return location.origin+location.pathname+'?portal='+id;}
-function cpLink(id){navigator.clipboard.writeText(pUrl(id)).then(()=>toast('Portal link copied','teal'));}
+function pUrl(id){
+  const c=clients.find(x=>x.id===id);
+  if(!c)return location.origin+location.pathname+'?portal='+id;
+  try{
+    const payload=btoa(unescape(encodeURIComponent(JSON.stringify(c))));
+    return location.origin+location.pathname+'?portal='+id+'&d='+payload;
+  }catch(e){return location.origin+location.pathname+'?portal='+id;}
+}
+function cpLink(id){
+  // Regenerate link with latest client data before copying
+  const c=clients.find(x=>x.id===id);
+  if(c){
+    // update client data in URL
+  }
+  navigator.clipboard.writeText(pUrl(id)).then(()=>toast('Portal link copied — send to client','teal'));
+}
 function viewPortal(id){renderPortal(id);showTab('portal',document.querySelectorAll('.tab')[1]);}
+
+function getClientFromUrl(){
+  const p=new URLSearchParams(location.search);
+  const d=p.get('d');
+  if(!d)return null;
+  try{return JSON.parse(decodeURIComponent(escape(atob(d))));}
+  catch(e){return null;}
+}
+function isClientView(){return !!new URLSearchParams(location.search).get('portal');}
 
 function renderPortalSel(){
   const wrap=document.getElementById('portalWrap');
@@ -1210,13 +1233,50 @@ function renderAll(){renderStudio();}
 // ════════════════════════════════════
 load();
 checkOAuth();
-renderAll();
-updateDriveBanner();
-setInterval(()=>{if(document.getElementById('tab-studio').classList.contains('active'))renderQ();},60000);
+
+// Check if this is a client viewing their portal link
 (function(){
   const p=new URLSearchParams(location.search);
-  if(p.get('portal')){showTab('portal',document.querySelectorAll('.tab')[1]);renderPortal(p.get('portal'));}
+  const pid=p.get('portal');
+  const d=p.get('d');
+
+  if(pid){
+    // CLIENT VIEW — hide Studio and Setup tabs completely
+    document.querySelectorAll('.tab').forEach(t=>{
+      if(t.textContent.trim()==='Studio'||t.textContent.trim()==='Setup'){
+        t.style.display='none';
+      }
+    });
+    document.getElementById('saveInd').style.display='none';
+
+    // Try to get client data from URL first (works on any browser/device)
+    let clientData = null;
+    if(d){
+      try{ clientData = JSON.parse(decodeURIComponent(escape(atob(d)))); }
+      catch(e){}
+    }
+
+    // If we got client data from URL, use it
+    if(clientData){
+      // Temporarily add to clients array for rendering
+      const exists = clients.find(x=>x.id===clientData.id);
+      if(!exists) clients.push(clientData);
+    }
+
+    // Show portal tab active
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.getElementById('tab-portal').classList.add('active');
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.getElementById('tabPortal').classList.add('active');
+    renderPortal(pid);
+  } else {
+    // STUDIO VIEW — normal load
+    renderAll();
+    updateDriveBanner();
+  }
 })();
+
+setInterval(()=>{if(document.getElementById('tab-studio').classList.contains('active'))renderQ();},60000);
 </script>
 </body>
 </html>
