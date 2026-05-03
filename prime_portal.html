@@ -8,6 +8,7 @@
 <meta name="theme-color" content="#191919">
 <title>Prime Retouch Lab</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=Syne:wght@400;500;600;700&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -406,7 +407,7 @@ body{font-family:'Syne',sans-serif;font-size:14px}
     <div class="setup-row"><div class="setup-n">2</div><div class="setup-c"><div class="setup-tl">Create a new project</div><div class="setup-b">Click the project dropdown (top left) → <strong>New Project</strong> → Name it <strong>Prime Retouch Lab</strong> → Create. Select it from the dropdown once created.</div></div></div>
     <div class="setup-row"><div class="setup-n">3</div><div class="setup-c"><div class="setup-tl">Enable Google Drive API</div><div class="setup-b">Left menu → <strong>APIs & Services → Library</strong> → Search <strong>Google Drive API</strong> → Click it → Click blue <strong>Enable</strong>.</div></div></div>
     <div class="setup-row"><div class="setup-n">4</div><div class="setup-c"><div class="setup-tl">Configure OAuth Consent Screen</div><div class="setup-b">Left menu → <strong>APIs & Services → OAuth consent screen</strong> → Select <strong>External</strong> → Create.<br><br>Fill in: App name = <strong>Prime Retouch Lab</strong>, support email = your Gmail, developer email = your Gmail. Click Save and Continue through all remaining screens without changing anything. Back to Dashboard when done.</div></div></div>
-    <div class="setup-row"><div class="setup-n">5</div><div class="setup-c"><div class="setup-tl">Create OAuth 2.0 Client ID</div><div class="setup-b">Left menu → <strong>APIs & Services → Credentials</strong> → <strong>+ Create Credentials → OAuth client ID</strong>.<br><br>Application type: <strong>Web application</strong><br>Name: <strong>Prime Portal</strong><br><br>Under Authorized JavaScript origins → Add URI:<div class="code">https://primeretouchlab.github.io</div>Also add:<div class="code">http://localhost</div>Leave redirect URIs empty. Click <strong>Create</strong>.<br><br>Copy your Client ID — it looks like:<div class="code">123456789-abcdefgh.apps.googleusercontent.com</div></div></div></div>
+    <div class="setup-row"><div class="setup-n">5</div><div class="setup-c"><div class="setup-tl">Create OAuth 2.0 Client ID</div><div class="setup-b">Left menu → <strong>APIs & Services → Credentials</strong> → <strong>+ Create Credentials → OAuth client ID</strong>.<br><br>Application type: <strong>Web application</strong><br>Name: <strong>Prime Portal</strong><br><br>Under <strong>Authorized JavaScript origins</strong> → Add URI:<div class="code">https://primeretouchlab.github.io</div>Also add:<div class="code">http://localhost</div><strong>Leave Authorized redirect URIs completely empty.</strong><br><br>Click <strong>Create</strong>. Copy your Client ID — it looks like:<div class="code">123456789-abcdefgh.apps.googleusercontent.com</div></div></div></div>
     <div class="setup-row"><div class="setup-n">6</div><div class="setup-c"><div class="setup-tl">Paste your Client ID here</div><div class="setup-b"><div class="si-row"><input class="fi" id="cidInput" placeholder="123456789-abc.apps.googleusercontent.com"><button onclick="saveCid()" style="padding:9px 14px;background:var(--gold);border:none;border-radius:8px;color:#000;font-family:'DM Mono',monospace;font-size:10px;cursor:pointer;white-space:nowrap">Save</button></div><div style="font-size:11px;font-family:'DM Mono',monospace" id="cidStatus">Not set</div></div></div></div>
     <div class="setup-row"><div class="setup-n">7</div><div class="setup-c"><div class="setup-tl">Connect in Studio tab</div><div class="setup-b">Go to <strong>Studio</strong> tab → tap the gold <strong>Connect</strong> banner. Google sign-in opens. Sign in → click Allow. Banner turns green. Done — all future clients auto-get Drive folders.</div></div></div>
     <div class="warn">⚠️ Google may show "This app isn't verified." That's normal for your own apps. Click <strong>Advanced → Go to Prime Retouch Lab (unsafe)</strong>. It's safe — it's accessing your own Drive.</div>
@@ -662,29 +663,35 @@ function renderNotifications(){
 }
 
 // ════════════════════════════════════
-// DRIVE OAUTH
+// DRIVE OAUTH — Google Identity Services
 // ════════════════════════════════════
+let tokenClient = null;
+
 function connectDrive(){
-  const cid=localStorage.getItem('prl_cid');
-  if(!cid){toast('Paste your Client ID in Setup tab first','red');showTab('setup',document.querySelectorAll('.tab')[2]);return;}
-  const p=new URLSearchParams({client_id:cid,redirect_uri:location.origin+location.pathname,response_type:'token',scope:'https://www.googleapis.com/auth/drive.file',state:'doa',prompt:'consent'});
-  location.href='https://accounts.google.com/o/oauth2/v2/auth?'+p.toString();
+  const cid = localStorage.getItem('prl_cid');
+  if(!cid){ toast('Paste your Client ID in Setup tab first','red'); showTab('setup',document.querySelectorAll('.tab')[2]); return; }
+  if(!window.google){ toast('Google script loading — try again in a moment','red'); return; }
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: cid,
+    scope: 'https://www.googleapis.com/auth/drive.file',
+    callback: (resp) => {
+      if(resp.error){ toast('Drive connection failed: '+resp.error,'red'); return; }
+      driveToken = resp.access_token;
+      const exp = Date.now() + (resp.expires_in||3600)*1000;
+      localStorage.setItem('prl_dt', driveToken);
+      localStorage.setItem('prl_dexp', exp.toString());
+      updateDriveBanner();
+      toast('Google Drive connected ✓','green');
+      if(!backupFid) dFirstBackup();
+    }
+  });
+  tokenClient.requestAccessToken({ prompt: 'consent' });
 }
+
 function checkOAuth(){
-  const hash=location.hash;
-  if(!hash||!hash.includes('access_token'))return;
-  const p=new URLSearchParams(hash.slice(1));
-  if(p.get('state')!=='doa')return;
-  const token=p.get('access_token');
-  if(!token)return;
-  driveToken=token;
-  const exp=parseInt(p.get('expires_in')||'3600');
-  localStorage.setItem('prl_dt',token);
-  localStorage.setItem('prl_dexp',(Date.now()+exp*1000).toString());
-  history.replaceState(null,'',location.pathname);
-  updateDriveBanner();
-  toast('Google Drive connected ✓','green');
-  if(!backupFid)dFirstBackup();
+  // GIS popup flow — no hash to check on page load
+  // Token is stored in localStorage from previous session
+  driveToken = localStorage.getItem('prl_dt') || null;
 }
 function isDConn(){
   const exp=parseInt(localStorage.getItem('prl_dexp')||'0');
