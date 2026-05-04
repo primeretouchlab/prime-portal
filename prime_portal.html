@@ -475,8 +475,11 @@ body{font-family:'Syne',sans-serif;font-size:14px}
       </div>
     </div>
     <div class="fg2">
-      <div class="fg"><label class="fl">Client Image Upload Link</label><input class="fi" id="f_tCli" placeholder="Drive link for their test image"></div>
-      <div class="fg"><label class="fl">Your Retouched Result Link</label><input class="fi" id="f_tRes" placeholder="Drive link for your retouched result"></div>
+      <div class="fg"><label class="fl">Client Upload Folder (auto-filled)</label><input class="fi" id="f_tCli" placeholder="Drive folder — client uploads test image here"></div>
+      <div class="fg"><label class="fl">Delivery Folder (auto-filled)</label><input class="fi" id="f_tDelDrive" placeholder="Drive folder — you drop retouched result here"></div>
+    </div>
+    <div class="fg"><label class="fl">Retouched Result Link (paste once ready)</label><input class="fi" id="f_tRes" placeholder="Direct link to your retouched image for client to view"></div>
+    <div class="fg2">
     </div>
     <div class="fg"><label class="fl">Style Notes / References</label><textarea class="fta" id="f_tNotes" placeholder="Colour preferences, skin tone, references..." style="min-height:56px"></textarea></div>
   </div>
@@ -638,9 +641,17 @@ function computeNotifs(){
     if(c.contractLink&&!c.contractSigned&&!isDismissed(c.id,'contract','contract')){
       items.push({client:c,batch:null,type:'contract',msg:'Contract ready — needs your signature'});
     }
-    // Invoice needs attention — link added but deposit not paid
-    if(c.invoiceLink&&!c.depositPaid&&!isDismissed(c.id,'invoice','invoice')){
-      items.push({client:c,batch:null,type:'invoice',msg:'Invoice ready — payment required to begin'});
+    // Invoice 1 — deposit
+    if(c.invoiceLink1&&!c.depositPaid&&!isDismissed(c.id,'invoice1','invoice1')){
+      items.push({client:c,batch:null,type:'invoice1',msg:'Invoice ready — 50% deposit required to begin'});
+    }
+    // Invoice 2 — balance
+    if(c.invoiceLink2&&!c.balancePaid&&!isDismissed(c.id,'invoice2','invoice2')){
+      items.push({client:c,batch:null,type:'invoice2',msg:'Invoice ready — 50% balance due before delivery'});
+    }
+    // Test retouched — notify client
+    if(c.testRetouchedLink&&c.testStatus==='Sent to Client'&&!isDismissed(c.id,'test','testretouch')){
+      items.push({client:c,batch:null,type:'testretouch',msg:'Test retouch sent — awaiting client approval'});
     }
     (c.batches||[]).forEach(b=>{
       if(b.status==='Waiting Client'&&!isDismissed(c.id,b.id,'review')){
@@ -766,8 +777,10 @@ async function createFolders(name){
     driveRootId=root.id;localStorage.setItem('prl_dri',root.id);
     const cf=await gocFolder(name,root.id);
     if(!cf)throw new Error('Client folder failed');
-    const [tf,sf,rf,ff,xf,invf]=await Promise.all([
-      gocFolder('01 — Test Retouch',cf.id),
+    const testParent=await gocFolder('01 — Test Retouch',cf.id);
+    const [testUpF,testDelF,sf,rf,ff,xf,invf]=await Promise.all([
+      gocFolder('01a — Test Upload',testParent?.id||cf.id),
+      gocFolder('01b — Test Delivery',testParent?.id||cf.id),
       gocFolder('02 — Selects',cf.id),
       gocFolder('03 — Review Previews',cf.id),
       gocFolder('04 — Final Delivery',cf.id),
@@ -775,7 +788,7 @@ async function createFolders(name){
       gocFolder('06 — Payment Receipts',cf.id)
     ]);
     toast('Drive folders created ✓','green');
-    return{testDrive:tf?.webViewLink||'',uploadDrive:sf?.webViewLink||'',reviewDrive:rf?.webViewLink||'',finalDrive:ff?.webViewLink||'',invDrive:invf?.webViewLink||'',clientFid:cf.id};
+    return{testUploadDrive:testUpF?.webViewLink||'',testDeliveryDrive:testDelF?.webViewLink||'',uploadDrive:sf?.webViewLink||'',reviewDrive:rf?.webViewLink||'',finalDrive:ff?.webViewLink||'',invDrive:invf?.webViewLink||'',clientFid:cf.id};
   }catch(e){console.error(e);toast('Drive folder creation failed','red');return null;}
 }
 async function dFirstBackup(){
@@ -939,7 +952,8 @@ function openEdit(id){
   document.getElementById('f_con').checked=!!c.contractSigned;
   document.getElementById('f_dep').checked=!!c.depositPaid;
   document.getElementById('f_bal').checked=!!c.balancePaid;
-  document.getElementById('f_tCli').value=c.testClientLink||'';
+  document.getElementById('f_tCli').value=c.testUploadDrive||c.testClientLink||'';
+  document.getElementById('f_tDelDrive').value=c.testDeliveryDrive||'';
   document.getElementById('f_tRes').value=c.testRetouchedLink||'';
   document.getElementById('f_tNotes').value=c.testStyleNotes||'';
   document.getElementById('f_cLink').value=c.contractLink||'';
@@ -947,7 +961,7 @@ function openEdit(id){
   document.getElementById('f_iLink2').value=c.invoiceLink2||'';
   
   document.getElementById('f_receiptLink').value=c.receiptLink||'';
-  document.getElementById('f_tDrive').value=c.testDrive||'';
+  document.getElementById('f_tDrive').value=c.testUploadDrive||c.testDrive||'';
   document.getElementById('f_uDrive').value=c.uploadDrive||'';
   document.getElementById('f_rDrive').value=c.reviewDrive||'';
   document.getElementById('f_fDrive').value=c.finalDrive||'';
@@ -956,7 +970,7 @@ function openEdit(id){
   setTSUI(tmpTS);renderBList();openM('cModal');
 }
 function clrForm(){
-  ['f_name','f_email','f_wa','f_tCli','f_tRes','f_tNotes','f_cLink','f_iLink1','f_iLink2','f_receiptLink','f_tDrive','f_uDrive','f_rDrive','f_fDrive','f_sNotes'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  ['f_name','f_email','f_wa','f_tCli','f_tDelDrive','f_tRes','f_tNotes','f_cLink','f_iLink1','f_iLink2','f_receiptLink','f_tDrive','f_uDrive','f_rDrive','f_fDrive','f_sNotes'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   ['f_tApp','f_con','f_dep','f_bal'].forEach(id=>document.getElementById(id).checked=false);
   document.getElementById('f_tier').value='Professional';
   document.getElementById('f_status').value='Onboarding';
@@ -980,6 +994,8 @@ async function saveClient(){
     depositPaid:document.getElementById('f_dep').checked,
     balancePaid:document.getElementById('f_bal').checked,
     testClientLink:document.getElementById('f_tCli').value.trim(),
+    testUploadDrive:document.getElementById('f_tCli').value.trim(),
+    testDeliveryDrive:document.getElementById('f_tDelDrive').value.trim(),
     testRetouchedLink:document.getElementById('f_tRes').value.trim(),
     testStyleNotes:document.getElementById('f_tNotes').value.trim(),
     contractLink:document.getElementById('f_cLink').value.trim(),
@@ -987,6 +1003,7 @@ async function saveClient(){
     invoiceLink2:document.getElementById('f_iLink2').value.trim(),
     receiptLink:document.getElementById('f_receiptLink').value.trim(),
     testDrive:document.getElementById('f_tDrive').value.trim(),
+    testUploadDrive:document.getElementById('f_tDrive').value.trim(),
     uploadDrive:document.getElementById('f_uDrive').value.trim(),
     reviewDrive:document.getElementById('f_rDrive').value.trim(),
     finalDrive:document.getElementById('f_fDrive').value.trim(),
@@ -997,7 +1014,7 @@ async function saveClient(){
   if(isNew&&isDConn()&&!client.uploadDrive){
     closeM('cModal');
     const f=await createFolders(name);
-    if(f){client.uploadDrive=f.uploadDrive;client.testDrive=f.testDrive;client.reviewDrive=f.reviewDrive;client.finalDrive=f.finalDrive;client.invDrive=f.invDrive;client.clientFid=f.clientFid;}
+    if(f){client.uploadDrive=f.uploadDrive;client.testUploadDrive=f.testUploadDrive;client.testDeliveryDrive=f.testDeliveryDrive;client.testClientLink=f.testUploadDrive;client.reviewDrive=f.reviewDrive;client.finalDrive=f.finalDrive;client.invDrive=f.invDrive;client.clientFid=f.clientFid;}
   }
   if(editId){const i=clients.findIndex(c=>c.id===editId);clients[i]=client;}
   else clients.unshift(client);
@@ -1124,7 +1141,7 @@ function renderPortal(id){
   const steps=[
     {title:'Test Retouch — Style Lock',sub:'One image retouched before you commit',done:c.testApproved,
       body:`<p>Before any paid work begins, we retouch one image from your shoot at no charge. This locks your preferred skin tone, colour grade, and finish — every image in your project will match this reference.</p>
-      ${c.testDrive||c.testClientLink?`<a href="${c.testDrive||c.testClientLink}" target="_blank" class="sl sl-g">📤 Upload your test image</a>`:''} 
+      ${c.testUploadDrive||c.testClientLink?`<a href="${c.testUploadDrive||c.testClientLink}" target="_blank" class="sl sl-g">📤 Upload your test image</a>`:''} 
       ${c.testRetouchedLink?`<a href="${c.testRetouchedLink}" target="_blank" class="sl sl-t">🎨 View your retouched result</a>`:''}
       ${wa?`<a href="https://wa.me/${wa}" target="_blank" class="sl sl-t">💬 Message us on WhatsApp</a>`:''}
       ${c.testStatus&&c.testStatus!=='Not Started'?`<div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--warn);margin-top:8px">Status: ${c.testStatus}</div>`:''}`},
@@ -1194,10 +1211,10 @@ function renderPortal(id){
   <div class="p-notif">
     <div class="p-notif-hdr"><div class="p-notif-dot"></div><div class="p-notif-title">${cNotifs.length} update${cNotifs.length>1?'s':''} need your attention</div></div>
     ${cNotifs.map(n=>`<div class="p-notif-item">
-      <div><div class="p-notif-name">${n.type==='contract'?'📄 Contract ready to sign':n.type==='invoice'?'💳 Invoice ready — payment required':n.batch?n.batch.name:'Update'}</div>
-      <div class="p-notif-sub">${n.type==='contract'?'Your contract is ready. Please review and sign to proceed.':n.type==='invoice'?'Your invoice is ready. Payment activates your project.':n.type==='review'?'📋 Review previews are ready — please give feedback':'📦 Your retouched files are ready to download'}</div></div>
+      <div><div class="p-notif-name">${n.type==='contract'?'📄 Contract ready to sign':n.type==='invoice1'?'💳 Invoice — 50% deposit ready':n.type==='invoice2'?'💳 Invoice — 50% balance ready':n.type==='testretouch'?'🎨 Test retouch ready to view':n.batch?n.batch.name:'Update'}</div>
+      <div class="p-notif-sub">${n.type==='contract'?'Your contract is ready. Please review and sign to proceed.':n.type==='invoice1'?'Your 50% deposit invoice is ready. Payment starts your project.':n.type==='invoice2'?'Your 50% balance invoice is ready. Payment unlocks final delivery.':n.type==='testretouch'?'Your test retouch is ready. Please review and approve to proceed.':n.type==='review'?'📋 Review previews are ready — please give feedback':'📦 Your retouched files are ready to download'}</div></div>
       ${n.type==='contract'&&n.client.contractLink?`<a href="${n.client.contractLink}" target="_blank" class="sl sl-g" style="margin:0;font-size:10px">Sign</a>`:''}
-      ${n.type==='invoice'&&n.client.invoiceLink?`<a href="${n.client.invoiceLink}" target="_blank" class="sl sl-g" style="margin:0;font-size:10px">Pay</a>`:''}
+      ${n.type==='invoice1'&&n.client.invoiceLink1?`<a href="${n.client.invoiceLink1}" target="_blank" class="sl sl-g" style="margin:0;font-size:10px">Pay</a>`:''} ${n.type==='invoice2'&&n.client.invoiceLink2?`<a href="${n.client.invoiceLink2}" target="_blank" class="sl sl-g" style="margin:0;font-size:10px">Pay</a>`:''} ${n.type==='testretouch'&&n.client.testRetouchedLink?`<a href="${n.client.testRetouchedLink}" target="_blank" class="sl sl-g" style="margin:0;font-size:10px">View</a>`:''}
       ${n.type==='review'&&n.client.reviewDrive?`<a href="${n.client.reviewDrive}" target="_blank" class="sl sl-t" style="margin:0;font-size:10px">View</a>`:''}
       ${n.type==='delivery'&&n.batch&&n.batch.deliveryLink?`<a href="${n.batch.deliveryLink}" target="_blank" class="sl sl-g" style="margin:0;font-size:10px">Download</a>`:''}
     </div>`).join('')}
@@ -1219,7 +1236,7 @@ function renderPortal(id){
     <div class="sec-label" style="margin-bottom:10px">Files & Links</div>
     ${(()=>{
       const lcards=[
-        {icon:'🎨',t:'Test Retouch',s:'Upload test image · view retouched result',link:c.testDrive||c.testClientLink,badge:c.testRetouchedLink&&c.testStatus==='Sent to Client',inj:'contract+invoice1',notify:'test_upload'},
+        {icon:'🎨',t:'Test Retouch',s:'Upload image · view result · leave comment',link:null,badge:c.testRetouchedLink&&c.testStatus==='Sent to Client',inj:'contract+invoice1',isTest:true},
         {icon:'📤',t:'Upload Files',s:'Drop your selects here',link:c.uploadDrive,notify:'selects_upload'},
         {icon:'🔍',t:'Review Previews',s:'Low-res previews for your approval',link:c.reviewDrive,badge:(c.batches||[]).some(b=>b.status==='Waiting Client'&&!isDismissed(c.id,b.id,'review')),inj:'invoice2'},
         {icon:'📦',t:'Final Delivery',s:'High-res finals after approval',link:c.finalDrive,badge:(c.batches||[]).some(b=>b.status==='Delivered'&&b.deliveryLink&&!isDismissed(c.id,b.id,'delivery'))}
@@ -1278,14 +1295,37 @@ function renderPortal(id){
           ${c.balancePaid?`<div style="margin-top:8px;background:rgba(76,175,80,.06);border:1px solid rgba(76,175,80,.25);border-radius:9px;padding:10px 14px;font-size:12px;color:var(--success)">✓ Balance confirmed — finals ready for download</div>`:''}
         </div>
       </div>`;
-      return lcards.map((l,i)=>`<div class="lcard${l.badge?' has-files':''}">
+      const testCard=`<div style="background:var(--surface);border:1px solid ${c.testRetouchedLink&&c.testStatus==='Sent to Client'?'rgba(212,175,55,.4)':'var(--border)'};border-radius:var(--r);margin-bottom:6px;overflow:hidden;${c.testRetouchedLink&&c.testStatus==='Sent to Client'?'background:rgba(212,175,55,.04);':''}">
+        <div onclick="(function(){var b=document.getElementById('testDropBody');var a=document.getElementById('testDropArrow');var open=b.style.display==='block';b.style.display=open?'none':'block';a.style.transform=open?'rotate(0deg)':'rotate(180deg)'})()" style="display:flex;align-items:center;gap:11px;padding:13px 15px;cursor:pointer">
+          <div style="font-size:17px;flex-shrink:0">🎨</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:var(--text)">Test Retouch</div>
+            <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:1px">${c.testStatus&&c.testStatus!=='Not Started'?c.testStatus:'Upload an image to begin'}</div>
+          </div>
+          ${c.testRetouchedLink&&c.testStatus==='Sent to Client'?`<span style="font-size:9px;font-family:'DM Mono',monospace;padding:2px 8px;border-radius:20px;background:var(--gold);color:#000;font-weight:700;margin-right:6px">NEW</span>`:''}
+          <span id="testDropArrow" style="color:var(--text3);font-size:12px;transition:transform .2s;flex-shrink:0">▼</span>
+        </div>
+        <div id="testDropBody" style="display:none;padding:0 15px 14px;border-top:1px solid var(--border)">
+          <div style="padding-top:12px;font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:12px">Send one image before any payment. I'll retouch it to dial in your exact style — no obligation.</div>
+          <div style="font-size:10px;font-family:'DM Mono',monospace;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Step 1 — Upload your test image</div>
+          ${c.testClientLink||c.testUploadDrive?`<a href="${c.testClientLink||c.testUploadDrive}" target="_blank" class="sl sl-t">📤 Upload test image</a>`:'<p style="font-size:11px;color:var(--text3);font-family:\'DM Mono\',monospace;margin:0 0 10px">Upload link coming shortly.</p>'}
+          <button onclick="(function(btn){var acts=JSON.parse(localStorage.getItem('prl_activity')||'[]');acts.unshift({id:Math.random().toString(36).slice(2),clientId:'${c.id}',clientName:'${c.name}',type:'test_upload',ts:new Date().toISOString(),seen:false});localStorage.setItem('prl_activity',JSON.stringify(acts));var o=btn.textContent;btn.textContent='✓ Photographer notified!';btn.style.color='var(--success)';btn.style.borderColor='var(--success)';setTimeout(function(){btn.textContent=o;btn.style.color='';btn.style.borderColor='';},2500);})(this)" style="margin-top:6px;width:100%;padding:9px;border-radius:9px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;letter-spacing:.04em">✓ I've uploaded — notify photographer</button>
+          <div style="font-size:10px;font-family:'DM Mono',monospace;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin:14px 0 6px">Step 2 — View retouched result</div>
+          ${c.testRetouchedLink?`<a href="${c.testRetouchedLink}" target="_blank" class="sl sl-g">🎨 View my retouched image</a>`:'<p style="font-size:11px;color:var(--text3);font-family:\'DM Mono\',monospace;margin:0 0 10px">Result will appear here once ready.</p>'}
+          ${c.testStatus==='Approved'?`<div style="margin-top:8px;background:rgba(76,175,80,.06);border:1px solid rgba(76,175,80,.25);border-radius:9px;padding:10px 14px;font-size:12px;color:var(--success)">✓ Test approved — ready to proceed</div>`:''}
+          <div style="font-size:10px;font-family:'DM Mono',monospace;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin:14px 0 6px">Leave a comment</div>
+          <textarea id="testComment_${c.id}" placeholder="Any notes on style, editing preferences, or feedback on the test retouch..." style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border:1px solid var(--border2);background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;resize:vertical;min-height:72px;outline:none"></textarea>
+          <button onclick="(function(btn){var ta=document.getElementById('testComment_${c.id}');var msg=ta.value.trim();if(!msg)return;var acts=JSON.parse(localStorage.getItem('prl_activity')||'[]');acts.unshift({id:Math.random().toString(36).slice(2),clientId:'${c.id}',clientName:'${c.name}',type:'test_comment',comment:msg,ts:new Date().toISOString(),seen:false});localStorage.setItem('prl_activity',JSON.stringify(acts));ta.value='';var o=btn.textContent;btn.textContent='✓ Comment sent!';btn.style.color='var(--success)';btn.style.borderColor='var(--success)';setTimeout(function(){btn.textContent=o;btn.style.color='';btn.style.borderColor='';},2500);})(this)" style="margin-top:6px;width:100%;padding:9px;border-radius:9px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;letter-spacing:.04em">Send comment</button>
+        </div>
+      </div>`;
+      return lcards.map((l,i)=>`${l.isTest?testCard:`<div class="lcard${l.badge?' has-files':''}">
         <div class="lcard-icon">${l.icon}</div>
         <div class="lcard-inf"><div class="lcard-t">${l.t}</div><div class="lcard-s">${l.s}</div></div>
         ${l.badge?`<span class="lcard-badge">NEW</span>`:''}
         ${l.link?`<a href="${l.link}" target="_blank" class="lbtn">Open</a>`:'<span class="lbtn dis">Pending</span>'}
       </div>
-      ${l.notify&&l.link?`<button onclick="clientNotify('${c.id}','${c.name}','${l.notify}')" style="width:100%;margin-bottom:6px;padding:9px;border-radius:9px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;letter-spacing:.04em">✓ I've uploaded my files — notify photographer</button>`:''}
-      ${l.inj==='contract+invoice1'?contractCard+invoice1Card:''}${l.inj==='invoice2'?invoice2Card:''}`).join('');
+      ${l.notify&&l.link?`<button onclick="(function(btn){var acts=JSON.parse(localStorage.getItem('prl_activity')||'[]');acts.unshift({id:Math.random().toString(36).slice(2),clientId:'${c.id}',clientName:'${c.name}',type:'${l.notify}',ts:new Date().toISOString(),seen:false});localStorage.setItem('prl_activity',JSON.stringify(acts));var o=btn.textContent;btn.textContent='✓ Photographer notified!';btn.style.color='var(--success)';btn.style.borderColor='var(--success)';setTimeout(function(){btn.textContent=o;btn.style.color='';btn.style.borderColor='';},2500);})(this)" style="width:100%;margin-bottom:6px;padding:9px;border-radius:9px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;letter-spacing:.04em">✓ I've uploaded my files — notify photographer</button>`:''}
+      `}${l.inj==='contract+invoice1'?contractCard+invoice1Card:''}${l.inj==='invoice2'?invoice2Card:''}`).join('');
     })()}
   </div>
   ${dHtml?`<div class="pb-sec"><div class="pb-stl" style="margin-bottom:10px">Delivered Batches</div>${dHtml}</div>`:''}
@@ -1330,6 +1370,7 @@ function toast(msg,type){
 // ════════════════════════════════════
 const ACT_LABELS={
   test_upload:'Uploaded test image',
+  test_comment:'Left a comment on test retouch',
   selects_upload:'Uploaded selects — ready to retouch',
   deposit_receipt:'Uploaded deposit receipt (50%)',
   balance_receipt:'Uploaded balance receipt (50%)'
@@ -1377,6 +1418,7 @@ function renderActivityList(){
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:600;color:var(--text)">${a.clientName}</div>
         <div style="font-size:11px;color:var(--text2);margin-top:1px">${label}</div>
+        ${a.comment?'<div style="font-size:11px;color:var(--text3);margin-top:3px;font-style:italic">'+a.comment+'</div>':''}
         <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:2px">${when}</div>
       </div>
       <button onclick="dismissActivity('${a.id}')" style="font-size:10px;font-family:'DM Mono',monospace;padding:3px 9px;border-radius:20px;border:1px solid var(--border2);color:var(--text3);background:transparent;cursor:pointer;flex-shrink:0">Done</button>
