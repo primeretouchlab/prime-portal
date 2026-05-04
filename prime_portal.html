@@ -1206,18 +1206,37 @@ function renderPortal(id){
   </div>
   <div class="lsec">
     <div class="sec-label" style="margin-bottom:10px">Files & Links</div>
-    ${[
-      {icon:'🎨',t:'Test Retouch',s:'Upload test image · view retouched result',link:c.testDrive||c.testClientLink,badge:c.testRetouchedLink&&c.testStatus==='Sent to Client'},
-      {icon:'📤',t:'Upload Files',s:'Drop your selects here',link:c.uploadDrive},
-      {icon:'📎',t:'Upload Receipt',s:'Pay invoice then upload your receipt here',link:c.invDrive,badge:c.invoiceLink&&!c.depositPaid},
-      {icon:'🔍',t:'Review Previews',s:'Low-res previews for your approval',link:c.reviewDrive,badge:(c.batches||[]).some(b=>b.status==='Waiting Client'&&!isDismissed(c.id,b.id,'review'))},
-      {icon:'📦',t:'Final Delivery',s:'High-res finals after approval',link:c.finalDrive,badge:(c.batches||[]).some(b=>b.status==='Delivered'&&b.deliveryLink&&!isDismissed(c.id,b.id,'delivery'))}
-    ].map(l=>`<div class="lcard${l.badge?' has-files':''}">
-      <div class="lcard-icon">${l.icon}</div>
-      <div class="lcard-inf"><div class="lcard-t">${l.t}</div><div class="lcard-s">${l.s}</div></div>
-      ${l.badge?`<span class="lcard-badge">NEW</span>`:''}
-      ${l.link?`<a href="${l.link}" target="_blank" class="lbtn">Open</a>`:'<span class="lbtn dis">Pending</span>'}
-    </div>`).join('')}
+    ${(()=>{
+      const lcards=[
+        {icon:'🎨',t:'Test Retouch',s:'Upload test image · view retouched result',link:c.testDrive||c.testClientLink,badge:c.testRetouchedLink&&c.testStatus==='Sent to Client'},
+        {icon:'📤',t:'Upload Files',s:'Drop your selects here',link:c.uploadDrive},
+        {icon:'📎',t:'Upload Receipt',s:'Pay invoice then upload your receipt here',link:c.invDrive,badge:c.invoiceLink&&!c.depositPaid},
+        {icon:'🔍',t:'Review Previews',s:'Low-res previews for your approval',link:c.reviewDrive,badge:(c.batches||[]).some(b=>b.status==='Waiting Client'&&!isDismissed(c.id,b.id,'review'))},
+        {icon:'📦',t:'Final Delivery',s:'High-res finals after approval',link:c.finalDrive,badge:(c.batches||[]).some(b=>b.status==='Delivered'&&b.deliveryLink&&!isDismissed(c.id,b.id,'delivery'))}
+      ];
+      const contractCard=`<div style="background:var(--surface);border:1px solid ${c.contractLink&&!c.contractSigned?'rgba(212,175,55,.4)':'var(--border)'};border-radius:var(--r);margin-bottom:6px;overflow:hidden;${c.contractLink&&!c.contractSigned?'background:rgba(212,175,55,.04);':''}">
+        <div onclick="(function(){var b=document.getElementById('contractDropBody');var a=document.getElementById('contractDropArrow');var open=b.style.display==='block';b.style.display=open?'none':'block';a.style.transform=open?'rotate(0deg)':'rotate(180deg)'})()" style="display:flex;align-items:center;gap:11px;padding:13px 15px;cursor:pointer">
+          <div style="font-size:17px;flex-shrink:0">📄</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:var(--text)">Contract</div>
+            <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:1px">${c.contractSigned?'Signed ✓':'Review and sign your contract'}</div>
+          </div>
+          ${c.contractLink&&!c.contractSigned?`<span style="font-size:9px;font-family:'DM Mono',monospace;padding:2px 8px;border-radius:20px;background:var(--gold);color:#000;font-weight:700;margin-right:6px">NEW</span>`:''}
+          <span id="contractDropArrow" style="color:var(--text3);font-size:12px;transition:transform .2s;flex-shrink:0">▼</span>
+        </div>
+        <div id="contractDropBody" style="display:none;padding:0 15px 14px;border-top:1px solid var(--border)">
+          <div style="padding-top:12px;font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:10px">Your contract outlines the scope of work, turnaround times, revision policy, and usage rights. Please review and sign to move your project forward.</div>
+          ${c.contractLink?`<a href="${c.contractLink}" target="_blank" class="sl sl-g">📄 Sign your contract</a>`:'<p style="font-size:11px;color:var(--text3);font-family:\'DM Mono\',monospace">Contract link coming shortly.</p>'}
+          ${c.contractSigned?`<div style="margin-top:8px;background:rgba(76,175,80,.06);border:1px solid rgba(76,175,80,.25);border-radius:9px;padding:10px 14px;font-size:12px;color:var(--success)">✓ Contract signed — thank you</div>`:''}
+        </div>
+      </div>`;
+      return lcards.map((l,i)=>`<div class="lcard${l.badge?' has-files':''}">
+        <div class="lcard-icon">${l.icon}</div>
+        <div class="lcard-inf"><div class="lcard-t">${l.t}</div><div class="lcard-s">${l.s}</div></div>
+        ${l.badge?`<span class="lcard-badge">NEW</span>`:''}
+        ${l.link?`<a href="${l.link}" target="_blank" class="lbtn">Open</a>`:'<span class="lbtn dis">Pending</span>'}
+      </div>${i===0?contractCard:''}`).join('');
+    })()}
   </div>
   ${dHtml?`<div class="pb-sec"><div class="pb-stl" style="margin-bottom:10px">Delivered Batches</div>${dHtml}</div>`:''}
   <div class="csec">
