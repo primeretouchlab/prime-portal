@@ -452,7 +452,7 @@ body{font-family:'Syne',sans-serif;font-size:14px}
       <div class="fg"><label class="fl">Monthly Capacity</label><input class="fi" id="f_cap" type="number" placeholder="150"></div>
       <div class="fg"><label class="fl">Images Remaining</label><input class="fi" id="f_rem" type="number" placeholder="150"></div>
       <div class="fg"><label class="fl">Email</label><input class="fi" id="f_email" type="email" placeholder="client@studio.com"></div>
-      <div class="fg"><label class="fl">WhatsApp</label><input class="fi" id="f_wa" placeholder="+1 234 567 8900"></div>
+      <div class="fg"><label class="fl">WhatsApp</label><input class="fi" id="f_wa" placeholder="+2349025865048"></div>
     </div>
   </div>
 
@@ -480,10 +480,16 @@ body{font-family:'Syne',sans-serif;font-size:14px}
     <div class="cbrow"><input type="checkbox" id="f_dep"><label for="f_dep">Deposit paid — work active</label></div>
   </div>
 
-  <div class="fsec"><div class="fsec-t"><span>Drive Links</span><span id="driveAutoLbl" style="font-size:10px;color:var(--success)"></span></div>
+  <div class="fsec"><div class="fsec-t"><span>Contract & Invoice</span><span id="driveAutoLbl" style="font-size:10px;color:var(--success)"></span></div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">When you add a contract link or invoice — a badge appears on the client portal notifying them it needs attention.</div>
+    <div class="fg"><label class="fl">Contract Link (BoldSign / DocuSign)</label><input class="fi" id="f_cLink" placeholder="Paste your contract signing URL"></div>
+    <div class="fg"><label class="fl">Invoice Link (PayPal / Stripe)</label><input class="fi" id="f_iLink" placeholder="Paste your invoice URL"></div>
+    <div class="fg"><label class="fl">Invoice Drive Folder (auto-linked or paste)</label><input class="fi" id="f_invDrive" placeholder="Auto-filled if Drive connected — client uploads receipt here"></div>
+    <div class="fg"><label class="fl">Payment Receipt Link (once client pays)</label><input class="fi" id="f_receiptLink" placeholder="Link to uploaded receipt in Drive"></div>
+  </div>
+
+  <div class="fsec"><div class="fsec-t"><span>Drive Links</span></div>
     <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6" id="driveLinkHint">If Drive is connected, folders auto-create on save. Otherwise paste links manually.</div>
-    <div class="fg"><label class="fl">Contract Link</label><input class="fi" id="f_cLink" placeholder="BoldSign / DocuSign URL"></div>
-    <div class="fg"><label class="fl">Invoice Link</label><input class="fi" id="f_iLink" placeholder="PayPal / Stripe invoice URL"></div>
     <div class="fg"><label class="fl">Test Retouch Drive</label><input class="fi" id="f_tDrive" placeholder="Auto-filled if Drive connected"></div>
     <div class="fg"><label class="fl">Upload Drive (selects)</label><input class="fi" id="f_uDrive" placeholder="Auto-filled if Drive connected"></div>
     <div class="fg"><label class="fl">Review Drive (previews)</label><input class="fi" id="f_rDrive" placeholder="Auto-filled if Drive connected"></div>
@@ -610,9 +616,9 @@ function updateCidStatus(){
 // - batch has a deliveryLink AND status is "Delivered" but client hasn't been marked as acknowledged
 // We track dismissed notifications in localStorage
 
-function getNotifKey(clientId, batchId, type){ return `notif_${clientId}_${batchId}_${type}`; }
-function isDismissed(clientId, batchId, type){ return localStorage.getItem(getNotifKey(clientId,batchId,type))==='1'; }
-function dismissNotif(clientId, batchId, type){
+function getNotifKey(clientId,batchId,type){return`notif_${clientId}_${batchId}_${type}`;}
+function isDismissed(clientId,batchId,type){return localStorage.getItem(getNotifKey(clientId,batchId,type))==='1';}
+function dismissNotif(clientId,batchId,type){
   localStorage.setItem(getNotifKey(clientId,batchId,type),'1');
   renderAll();
 }
@@ -620,6 +626,14 @@ function dismissNotif(clientId, batchId, type){
 function computeNotifs(){
   const items=[];
   clients.forEach(c=>{
+    // Contract needs attention — link added but not yet signed
+    if(c.contractLink&&!c.contractSigned&&!isDismissed(c.id,'contract','contract')){
+      items.push({client:c,batch:null,type:'contract',msg:'Contract ready — needs your signature'});
+    }
+    // Invoice needs attention — link added but deposit not paid
+    if(c.invoiceLink&&!c.depositPaid&&!isDismissed(c.id,'invoice','invoice')){
+      items.push({client:c,batch:null,type:'invoice',msg:'Invoice ready — payment required to begin'});
+    }
     (c.batches||[]).forEach(b=>{
       if(b.status==='Waiting Client'&&!isDismissed(c.id,b.id,'review')){
         items.push({client:c,batch:b,type:'review',msg:'Review previews uploaded — awaiting client feedback'});
@@ -644,10 +658,10 @@ function renderNotifications(){
     list.innerHTML=notifs.map(n=>`
       <div class="notif-item">
         <div class="notif-item-left">
-          <div class="notif-item-name">${n.client.name} — ${n.batch.name}</div>
+          <div class="notif-item-name">${n.client.name}${n.batch?' — '+n.batch.name:''}</div>
           <div class="notif-item-meta">${n.msg}</div>
         </div>
-        <button class="notif-dismiss" onclick="dismissNotif('${n.client.id}','${n.batch.id}','${n.type}')">Dismiss</button>
+        <button class="notif-dismiss" onclick="dismissNotif('${n.client.id}','${n.batch?n.batch.id:n.type}','${n.type}')">Dismiss</button>
       </div>`).join('');
   } else {
     banner.classList.remove('show');
@@ -744,15 +758,16 @@ async function createFolders(name){
     driveRootId=root.id;localStorage.setItem('prl_dri',root.id);
     const cf=await gocFolder(name,root.id);
     if(!cf)throw new Error('Client folder failed');
-    const [tf,sf,rf,ff,xf]=await Promise.all([
+    const [tf,sf,rf,ff,xf,invf]=await Promise.all([
       gocFolder('01 — Test Retouch',cf.id),
       gocFolder('02 — Selects',cf.id),
       gocFolder('03 — Review Previews',cf.id),
       gocFolder('04 — Final Delivery',cf.id),
-      gocFolder('05 — Contract & Invoice',cf.id)
+      gocFolder('05 — Contract & Invoice',cf.id),
+      gocFolder('06 — Payment Receipts',cf.id)
     ]);
     toast('Drive folders created ✓','green');
-    return{testDrive:tf?.webViewLink||'',uploadDrive:sf?.webViewLink||'',reviewDrive:rf?.webViewLink||'',finalDrive:ff?.webViewLink||'',clientFid:cf.id};
+    return{testDrive:tf?.webViewLink||'',uploadDrive:sf?.webViewLink||'',reviewDrive:rf?.webViewLink||'',finalDrive:ff?.webViewLink||'',invDrive:invf?.webViewLink||'',clientFid:cf.id};
   }catch(e){console.error(e);toast('Drive folder creation failed','red');return null;}
 }
 async function dFirstBackup(){
@@ -920,6 +935,8 @@ function openEdit(id){
   document.getElementById('f_tNotes').value=c.testStyleNotes||'';
   document.getElementById('f_cLink').value=c.contractLink||'';
   document.getElementById('f_iLink').value=c.invoiceLink||'';
+  document.getElementById('f_invDrive').value=c.invDrive||'';
+  document.getElementById('f_receiptLink').value=c.receiptLink||'';
   document.getElementById('f_tDrive').value=c.testDrive||'';
   document.getElementById('f_uDrive').value=c.uploadDrive||'';
   document.getElementById('f_rDrive').value=c.reviewDrive||'';
@@ -929,7 +946,7 @@ function openEdit(id){
   setTSUI(tmpTS);renderBList();openM('cModal');
 }
 function clrForm(){
-  ['f_name','f_email','f_wa','f_tCli','f_tRes','f_tNotes','f_cLink','f_iLink','f_tDrive','f_uDrive','f_rDrive','f_fDrive','f_sNotes'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  ['f_name','f_email','f_wa','f_tCli','f_tRes','f_tNotes','f_cLink','f_iLink','f_invDrive','f_receiptLink','f_tDrive','f_uDrive','f_rDrive','f_fDrive','f_sNotes'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   ['f_tApp','f_con','f_dep'].forEach(id=>document.getElementById(id).checked=false);
   document.getElementById('f_tier').value='Professional';
   document.getElementById('f_status').value='Onboarding';
@@ -956,6 +973,8 @@ async function saveClient(){
     testStyleNotes:document.getElementById('f_tNotes').value.trim(),
     contractLink:document.getElementById('f_cLink').value.trim(),
     invoiceLink:document.getElementById('f_iLink').value.trim(),
+    invDrive:document.getElementById('f_invDrive').value.trim(),
+    receiptLink:document.getElementById('f_receiptLink').value.trim(),
     testDrive:document.getElementById('f_tDrive').value.trim(),
     uploadDrive:document.getElementById('f_uDrive').value.trim(),
     reviewDrive:document.getElementById('f_rDrive').value.trim(),
@@ -967,7 +986,7 @@ async function saveClient(){
   if(isNew&&isDConn()&&!client.uploadDrive){
     closeM('cModal');
     const f=await createFolders(name);
-    if(f){client.uploadDrive=f.uploadDrive;client.testDrive=f.testDrive;client.reviewDrive=f.reviewDrive;client.finalDrive=f.finalDrive;client.clientFid=f.clientFid;}
+    if(f){client.uploadDrive=f.uploadDrive;client.testDrive=f.testDrive;client.reviewDrive=f.reviewDrive;client.finalDrive=f.finalDrive;client.invDrive=f.invDrive;client.clientFid=f.clientFid;}
   }
   if(editId){const i=clients.findIndex(c=>c.id===editId);clients[i]=client;}
   else clients.unshift(client);
@@ -1101,7 +1120,14 @@ function renderPortal(id){
     {title:'Sign Your Contract',sub:'Review scope, turnaround, and usage rights',done:c.contractSigned,
       body:`<p>Your contract outlines the scope of work, turnaround times, revision policy, and usage rights. Signing takes under two minutes.</p>${c.contractLink?`<a href="${c.contractLink}" target="_blank" class="sl sl-g">📄 Review and sign contract</a>`:'<p style="color:var(--text3);font-size:11px">Contract link coming shortly.</p>'}`},
     {title:'Pay Your Deposit (50%)',sub:'Work begins after deposit is confirmed',done:c.depositPaid,
-      body:`<p>A 50% deposit is required before retouching begins. The remaining 50% is due after you approve the final delivery. Accepted: PayPal · Stripe · Bank transfer.</p>${c.invoiceLink?`<a href="${c.invoiceLink}" target="_blank" class="sl sl-g">💳 View and pay invoice</a>`:'<p style="color:var(--text3);font-size:11px">Invoice coming shortly.</p>'}`},
+      body:`<p>A 50% deposit is required before retouching begins. The remaining 50% is due after you approve the final delivery. Accepted: PayPal · Stripe · Bank transfer.</p>
+      ${c.invoiceLink?`<a href="${c.invoiceLink}" target="_blank" class="sl sl-g">💳 View and pay invoice</a>`:'<p style="color:var(--text3);font-size:11px">Invoice coming shortly.</p>'}
+      ${c.invDrive?`<div style="margin-top:10px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.2);border-radius:9px;padding:12px 14px">
+        <div style="font-size:10px;font-family:'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-bottom:6px">Upload Payment Receipt</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:8px">Once payment is made, upload your receipt to the folder below. We'll confirm and activate your project.</div>
+        <a href="${c.invDrive}" target="_blank" class="sl sl-g">📎 Upload receipt to Drive</a>
+      </div>`:''}
+      ${c.receiptLink?`<div style="margin-top:8px;background:rgba(76,175,80,.06);border:1px solid rgba(76,175,80,.25);border-radius:9px;padding:10px 14px;font-size:12px;color:var(--success)">✓ Receipt received — confirming payment</div>`:''}`},
     {title:'Submit Your Files',sub:'Upload selects — work begins within 24 hours',done:c.depositPaid&&c.contractSigned,
       body:`<p>Upload your selected images to your dedicated folder. Name files clearly (e.g. SHOOT_NAME_001.jpg). Message us on WhatsApp once uploaded.</p>
       ${c.uploadDrive?`<a href="${c.uploadDrive}" target="_blank" class="sl sl-g">📁 Upload your selects</a>`:''}
@@ -1157,9 +1183,12 @@ function renderPortal(id){
   <div class="p-notif">
     <div class="p-notif-hdr"><div class="p-notif-dot"></div><div class="p-notif-title">${cNotifs.length} update${cNotifs.length>1?'s':''} need your attention</div></div>
     ${cNotifs.map(n=>`<div class="p-notif-item">
-      <div><div class="p-notif-name">${n.batch.name}</div><div class="p-notif-sub">${n.type==='review'?'📋 Review previews are ready — please give feedback':'📦 Your retouched files are ready to download'}</div></div>
-      ${n.type==='review'&&c.reviewDrive?`<a href="${c.reviewDrive}" target="_blank" class="sl sl-t" style="margin:0;font-size:10px">View</a>`:''}
-      ${n.type==='delivery'&&n.batch.deliveryLink?`<a href="${n.batch.deliveryLink}" target="_blank" class="sl sl-g" style="margin:0;font-size:10px">Download</a>`:''}
+      <div><div class="p-notif-name">${n.type==='contract'?'📄 Contract ready to sign':n.type==='invoice'?'💳 Invoice ready — payment required':n.batch?n.batch.name:'Update'}</div>
+      <div class="p-notif-sub">${n.type==='contract'?'Your contract is ready. Please review and sign to proceed.':n.type==='invoice'?'Your invoice is ready. Payment activates your project.':n.type==='review'?'📋 Review previews are ready — please give feedback':'📦 Your retouched files are ready to download'}</div></div>
+      ${n.type==='contract'&&n.client.contractLink?`<a href="${n.client.contractLink}" target="_blank" class="sl sl-g" style="margin:0;font-size:10px">Sign</a>`:''}
+      ${n.type==='invoice'&&n.client.invoiceLink?`<a href="${n.client.invoiceLink}" target="_blank" class="sl sl-g" style="margin:0;font-size:10px">Pay</a>`:''}
+      ${n.type==='review'&&n.client.reviewDrive?`<a href="${n.client.reviewDrive}" target="_blank" class="sl sl-t" style="margin:0;font-size:10px">View</a>`:''}
+      ${n.type==='delivery'&&n.batch&&n.batch.deliveryLink?`<a href="${n.batch.deliveryLink}" target="_blank" class="sl sl-g" style="margin:0;font-size:10px">Download</a>`:''}
     </div>`).join('')}
   </div>`:''}
   <div class="ovg">
@@ -1180,6 +1209,7 @@ function renderPortal(id){
     ${[
       {icon:'🎨',t:'Test Retouch',s:'Upload test image · view retouched result',link:c.testDrive||c.testClientLink,badge:c.testRetouchedLink&&c.testStatus==='Sent to Client'},
       {icon:'📤',t:'Upload Files',s:'Drop your selects here',link:c.uploadDrive},
+      {icon:'📎',t:'Upload Receipt',s:'Pay invoice then upload your receipt here',link:c.invDrive,badge:c.invoiceLink&&!c.depositPaid},
       {icon:'🔍',t:'Review Previews',s:'Low-res previews for your approval',link:c.reviewDrive,badge:(c.batches||[]).some(b=>b.status==='Waiting Client'&&!isDismissed(c.id,b.id,'review'))},
       {icon:'📦',t:'Final Delivery',s:'High-res finals after approval',link:c.finalDrive,badge:(c.batches||[]).some(b=>b.status==='Delivered'&&b.deliveryLink&&!isDismissed(c.id,b.id,'delivery'))}
     ].map(l=>`<div class="lcard${l.badge?' has-files':''}">
@@ -1193,7 +1223,7 @@ function renderPortal(id){
   <div class="csec">
     <div class="csec-t">Get in Touch</div>
     <div class="csec-s">Questions about your project? We respond within 4 hours.</div>
-    ${wa?`<div class="crow"><div class="cico">💬</div><div class="cinf"><div class="cl">WhatsApp</div><div class="cv">${c.whatsapp}</div></div><a href="https://wa.me/${wa}" target="_blank" class="clink">Message</a></div>`:''}
+    ${(wa||'2349025865048')?`<div class="crow"><div class="cico">💬</div><div class="cinf"><div class="cl">WhatsApp</div><div class="cv">${c.whatsapp||'+2349025865048'}</div></div><a href="https://wa.me/${wa||'2349025865048'}" target="_blank" class="clink">Message</a></div>`:''}
     <div class="crow"><div class="cico">✉️</div><div class="cinf"><div class="cl">Email</div><div class="cv">primeretouchlab@gmail.com</div></div><a href="mailto:primeretouchlab@gmail.com" class="clink">Email</a></div>
   </div>
   <div class="p-foot"><span>Prime Retouch Lab</span> · Refined retouching for photographers who value their time.</div>`;
