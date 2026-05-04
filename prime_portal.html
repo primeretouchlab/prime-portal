@@ -1210,7 +1210,6 @@ function renderPortal(id){
       const lcards=[
         {icon:'🎨',t:'Test Retouch',s:'Upload test image · view retouched result',link:c.testDrive||c.testClientLink,badge:c.testRetouchedLink&&c.testStatus==='Sent to Client'},
         {icon:'📤',t:'Upload Files',s:'Drop your selects here',link:c.uploadDrive},
-        {icon:'📎',t:'Upload Receipt',s:'Pay invoice then upload your receipt here',link:c.invDrive,badge:c.invoiceLink&&!c.depositPaid},
         {icon:'🔍',t:'Review Previews',s:'Low-res previews for your approval',link:c.reviewDrive,badge:(c.batches||[]).some(b=>b.status==='Waiting Client'&&!isDismissed(c.id,b.id,'review'))},
         {icon:'📦',t:'Final Delivery',s:'High-res finals after approval',link:c.finalDrive,badge:(c.batches||[]).some(b=>b.status==='Delivered'&&b.deliveryLink&&!isDismissed(c.id,b.id,'delivery'))}
       ];
@@ -1230,12 +1229,13 @@ function renderPortal(id){
           ${c.contractSigned?`<div style="margin-top:8px;background:rgba(76,175,80,.06);border:1px solid rgba(76,175,80,.25);border-radius:9px;padding:10px 14px;font-size:12px;color:var(--success)">✓ Contract signed — thank you</div>`:''}
         </div>
       </div>`;
+      const invoiceCard=`<div class="lcard${c.invoiceLink&&!c.depositPaid?' has-files':''}"><div class="lcard-icon">📎</div><div class="lcard-inf"><div class="lcard-t">Invoice & Payment</div><div class="lcard-s">Pay invoice then upload your receipt here</div></div>${c.invoiceLink&&!c.depositPaid?'<span class=\"lcard-badge\">NEW</span>':''} ${c.invDrive?`<a href="${c.invDrive}" target="_blank" class="lbtn">Open</a>`:'<span class=\"lbtn dis\">Pending</span>'}</div>`;
       return lcards.map((l,i)=>`<div class="lcard${l.badge?' has-files':''}">
         <div class="lcard-icon">${l.icon}</div>
         <div class="lcard-inf"><div class="lcard-t">${l.t}</div><div class="lcard-s">${l.s}</div></div>
         ${l.badge?`<span class="lcard-badge">NEW</span>`:''}
         ${l.link?`<a href="${l.link}" target="_blank" class="lbtn">Open</a>`:'<span class="lbtn dis">Pending</span>'}
-      </div>${i===0?contractCard:''}`).join('');
+      </div>${i===0?contractCard+invoiceCard:''}`).join('');
     })()}
   </div>
   ${dHtml?`<div class="pb-sec"><div class="pb-stl" style="margin-bottom:10px">Delivered Batches</div>${dHtml}</div>`:''}
