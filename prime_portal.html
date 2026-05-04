@@ -379,6 +379,13 @@ body{font-family:'Syne',sans-serif;font-size:14px}
   <button class="btn-add" onclick="openAdd()">+ Add new client</button>
 
   <div style="height:1px;background:var(--border);margin:18px 0"></div>
+  <div class="sec-label" style="margin-bottom:8px">
+    <span>Client Activity</span>
+    <button onclick="clearAllActivity()" style="font-size:9px;font-family:'DM Mono',monospace;padding:3px 9px;border-radius:20px;border:1px solid var(--border2);color:var(--text3);background:transparent;cursor:pointer;letter-spacing:.06em">Clear all</button>
+  </div>
+  <div id="activityList" style="margin-bottom:18px"></div>
+
+  <div style="height:1px;background:var(--border);margin:18px 0"></div>
   <div class="sec-label">Data backup</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:6px">
     <button onclick="exportJSON()" style="padding:10px;background:var(--surface);border:1px solid var(--border2);border-radius:9px;color:var(--text3);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">↓ Export</button>
@@ -477,14 +484,15 @@ body{font-family:'Syne',sans-serif;font-size:14px}
   <div class="fsec"><div class="fsec-t">Onboarding</div>
     <div class="cbrow"><input type="checkbox" id="f_tApp"><label for="f_tApp">Test retouch approved — style locked</label></div>
     <div class="cbrow"><input type="checkbox" id="f_con"><label for="f_con">Contract signed</label></div>
-    <div class="cbrow"><input type="checkbox" id="f_dep"><label for="f_dep">Deposit paid — work active</label></div>
+    <div class="cbrow"><input type="checkbox" id="f_dep"><label for="f_dep">50% Deposit paid</label></div>
+    <div class="cbrow"><input type="checkbox" id="f_bal"><label for="f_bal">50% Balance paid — work active</label></div>
   </div>
 
   <div class="fsec"><div class="fsec-t"><span>Contract & Invoice</span><span id="driveAutoLbl" style="font-size:10px;color:var(--success)"></span></div>
     <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">When you add a contract link or invoice — a badge appears on the client portal notifying them it needs attention.</div>
     <div class="fg"><label class="fl">Contract Link (BoldSign / DocuSign)</label><input class="fi" id="f_cLink" placeholder="Paste your contract signing URL"></div>
-    <div class="fg"><label class="fl">Invoice Link (PayPal / Stripe)</label><input class="fi" id="f_iLink" placeholder="Paste your invoice URL"></div>
-    <div class="fg"><label class="fl">Invoice Drive Folder (auto-linked or paste)</label><input class="fi" id="f_invDrive" placeholder="Auto-filled if Drive connected — client uploads receipt here"></div>
+    <div class="fg"><label class="fl">Invoice 1 — 50% Deposit (before project starts)</label><input class="fi" id="f_iLink1" placeholder="PayPal / Stripe link for 50% deposit"></div>
+    <div class="fg"><label class="fl">Invoice 2 — 50% Balance (before final delivery)</label><input class="fi" id="f_iLink2" placeholder="PayPal / Stripe link for 50% balance"></div>
     <div class="fg"><label class="fl">Payment Receipt Link (once client pays)</label><input class="fi" id="f_receiptLink" placeholder="Link to uploaded receipt in Drive"></div>
   </div>
 
@@ -930,12 +938,14 @@ function openEdit(id){
   document.getElementById('f_tApp').checked=!!c.testApproved;
   document.getElementById('f_con').checked=!!c.contractSigned;
   document.getElementById('f_dep').checked=!!c.depositPaid;
+  document.getElementById('f_bal').checked=!!c.balancePaid;
   document.getElementById('f_tCli').value=c.testClientLink||'';
   document.getElementById('f_tRes').value=c.testRetouchedLink||'';
   document.getElementById('f_tNotes').value=c.testStyleNotes||'';
   document.getElementById('f_cLink').value=c.contractLink||'';
-  document.getElementById('f_iLink').value=c.invoiceLink||'';
-  document.getElementById('f_invDrive').value=c.invDrive||'';
+  document.getElementById('f_iLink1').value=c.invoiceLink1||'';
+  document.getElementById('f_iLink2').value=c.invoiceLink2||'';
+  
   document.getElementById('f_receiptLink').value=c.receiptLink||'';
   document.getElementById('f_tDrive').value=c.testDrive||'';
   document.getElementById('f_uDrive').value=c.uploadDrive||'';
@@ -946,8 +956,8 @@ function openEdit(id){
   setTSUI(tmpTS);renderBList();openM('cModal');
 }
 function clrForm(){
-  ['f_name','f_email','f_wa','f_tCli','f_tRes','f_tNotes','f_cLink','f_iLink','f_invDrive','f_receiptLink','f_tDrive','f_uDrive','f_rDrive','f_fDrive','f_sNotes'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
-  ['f_tApp','f_con','f_dep'].forEach(id=>document.getElementById(id).checked=false);
+  ['f_name','f_email','f_wa','f_tCli','f_tRes','f_tNotes','f_cLink','f_iLink1','f_iLink2','f_receiptLink','f_tDrive','f_uDrive','f_rDrive','f_fDrive','f_sNotes'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  ['f_tApp','f_con','f_dep','f_bal'].forEach(id=>document.getElementById(id).checked=false);
   document.getElementById('f_tier').value='Professional';
   document.getElementById('f_status').value='Onboarding';
   ['f_cap','f_rem'].forEach(id=>document.getElementById(id).value='');
@@ -968,12 +978,13 @@ async function saveClient(){
     testApproved:document.getElementById('f_tApp').checked,
     contractSigned:document.getElementById('f_con').checked,
     depositPaid:document.getElementById('f_dep').checked,
+    balancePaid:document.getElementById('f_bal').checked,
     testClientLink:document.getElementById('f_tCli').value.trim(),
     testRetouchedLink:document.getElementById('f_tRes').value.trim(),
     testStyleNotes:document.getElementById('f_tNotes').value.trim(),
     contractLink:document.getElementById('f_cLink').value.trim(),
-    invoiceLink:document.getElementById('f_iLink').value.trim(),
-    invDrive:document.getElementById('f_invDrive').value.trim(),
+    invoiceLink1:document.getElementById('f_iLink1').value.trim(),
+    invoiceLink2:document.getElementById('f_iLink2').value.trim(),
     receiptLink:document.getElementById('f_receiptLink').value.trim(),
     testDrive:document.getElementById('f_tDrive').value.trim(),
     uploadDrive:document.getElementById('f_uDrive').value.trim(),
@@ -1208,11 +1219,13 @@ function renderPortal(id){
     <div class="sec-label" style="margin-bottom:10px">Files & Links</div>
     ${(()=>{
       const lcards=[
-        {icon:'🎨',t:'Test Retouch',s:'Upload test image · view retouched result',link:c.testDrive||c.testClientLink,badge:c.testRetouchedLink&&c.testStatus==='Sent to Client'},
-        {icon:'📤',t:'Upload Files',s:'Drop your selects here',link:c.uploadDrive},
-        {icon:'🔍',t:'Review Previews',s:'Low-res previews for your approval',link:c.reviewDrive,badge:(c.batches||[]).some(b=>b.status==='Waiting Client'&&!isDismissed(c.id,b.id,'review'))},
+        {icon:'🎨',t:'Test Retouch',s:'Upload test image · view retouched result',link:c.testDrive||c.testClientLink,badge:c.testRetouchedLink&&c.testStatus==='Sent to Client',inj:'contract+invoice1',notify:'test_upload'},
+        {icon:'📤',t:'Upload Files',s:'Drop your selects here',link:c.uploadDrive,notify:'selects_upload'},
+        {icon:'🔍',t:'Review Previews',s:'Low-res previews for your approval',link:c.reviewDrive,badge:(c.batches||[]).some(b=>b.status==='Waiting Client'&&!isDismissed(c.id,b.id,'review')),inj:'invoice2'},
         {icon:'📦',t:'Final Delivery',s:'High-res finals after approval',link:c.finalDrive,badge:(c.batches||[]).some(b=>b.status==='Delivered'&&b.deliveryLink&&!isDismissed(c.id,b.id,'delivery'))}
       ];
+      const hasBadge1=c.invoiceLink1&&!c.depositPaid;
+      const hasBadge2=c.invoiceLink2&&!c.balancePaid;
       const contractCard=`<div style="background:var(--surface);border:1px solid ${c.contractLink&&!c.contractSigned?'rgba(212,175,55,.4)':'var(--border)'};border-radius:var(--r);margin-bottom:6px;overflow:hidden;${c.contractLink&&!c.contractSigned?'background:rgba(212,175,55,.04);':''}">
         <div onclick="(function(){var b=document.getElementById('contractDropBody');var a=document.getElementById('contractDropArrow');var open=b.style.display==='block';b.style.display=open?'none':'block';a.style.transform=open?'rotate(0deg)':'rotate(180deg)'})()" style="display:flex;align-items:center;gap:11px;padding:13px 15px;cursor:pointer">
           <div style="font-size:17px;flex-shrink:0">📄</div>
@@ -1229,13 +1242,50 @@ function renderPortal(id){
           ${c.contractSigned?`<div style="margin-top:8px;background:rgba(76,175,80,.06);border:1px solid rgba(76,175,80,.25);border-radius:9px;padding:10px 14px;font-size:12px;color:var(--success)">✓ Contract signed — thank you</div>`:''}
         </div>
       </div>`;
-      const invoiceCard=`<div class="lcard${c.invoiceLink&&!c.depositPaid?' has-files':''}"><div class="lcard-icon">📎</div><div class="lcard-inf"><div class="lcard-t">Invoice & Payment</div><div class="lcard-s">Pay invoice then upload your receipt here</div></div>${c.invoiceLink&&!c.depositPaid?'<span class=\"lcard-badge\">NEW</span>':''} ${c.invDrive?`<a href="${c.invDrive}" target="_blank" class="lbtn">Open</a>`:'<span class=\"lbtn dis\">Pending</span>'}</div>`;
+      const invoice1Card=`<div style="background:var(--surface);border:1px solid ${hasBadge1?'rgba(212,175,55,.4)':'var(--border)'};border-radius:var(--r);margin-bottom:6px;overflow:hidden;${hasBadge1?'background:rgba(212,175,55,.04);':''}">
+        <div onclick="(function(){var b=document.getElementById('inv1DropBody');var a=document.getElementById('inv1DropArrow');var open=b.style.display==='block';b.style.display=open?'none':'block';a.style.transform=open?'rotate(0deg)':'rotate(180deg)'})()" style="display:flex;align-items:center;gap:11px;padding:13px 15px;cursor:pointer">
+          <div style="font-size:17px;flex-shrink:0">💳</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:var(--text)">Invoice — 50% Deposit</div>
+            <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:1px">${c.depositPaid?'Paid ✓':'Required before project begins'}</div>
+          </div>
+          ${hasBadge1?`<span style="font-size:9px;font-family:'DM Mono',monospace;padding:2px 8px;border-radius:20px;background:var(--gold);color:#000;font-weight:700;margin-right:6px">NEW</span>`:''}
+          <span id="inv1DropArrow" style="color:var(--text3);font-size:12px;transition:transform .2s;flex-shrink:0">▼</span>
+        </div>
+        <div id="inv1DropBody" style="display:none;padding:0 15px 14px;border-top:1px solid var(--border)">
+          <div style="padding-top:12px;font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:10px">A 50% deposit is required to begin retouching. Pay via the link below, then upload your receipt to confirm.</div>
+          ${c.invoiceLink1?`<a href="${c.invoiceLink1}" target="_blank" class="sl sl-g">💳 Pay 50% deposit</a>`:'<p style="font-size:11px;color:var(--text3);font-family:\'DM Mono\',monospace">Invoice coming shortly.</p>'}
+          ${c.invDrive?`<a href="${c.invDrive}" target="_blank" class="sl sl-t" style="margin-top:6px">📎 Upload payment receipt</a>`:''}
+          ${c.invDrive?`<button onclick="clientNotify('${c.id}','${c.name}','deposit_receipt')" style="margin-top:8px;width:100%;padding:9px;border-radius:9px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;letter-spacing:.04em">✓ I've uploaded my receipt</button>`:''}
+          ${c.depositPaid?`<div style="margin-top:8px;background:rgba(76,175,80,.06);border:1px solid rgba(76,175,80,.25);border-radius:9px;padding:10px 14px;font-size:12px;color:var(--success)">✓ Deposit confirmed — retouching in progress</div>`:''}
+        </div>
+      </div>`;
+      const invoice2Card=`<div style="background:var(--surface);border:1px solid ${hasBadge2?'rgba(212,175,55,.4)':'var(--border)'};border-radius:var(--r);margin-bottom:6px;overflow:hidden;${hasBadge2?'background:rgba(212,175,55,.04);':''}">
+        <div onclick="(function(){var b=document.getElementById('inv2DropBody');var a=document.getElementById('inv2DropArrow');var open=b.style.display==='block';b.style.display=open?'none':'block';a.style.transform=open?'rotate(0deg)':'rotate(180deg)'})()" style="display:flex;align-items:center;gap:11px;padding:13px 15px;cursor:pointer">
+          <div style="font-size:17px;flex-shrink:0">💳</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:var(--text)">Invoice — 50% Balance</div>
+            <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:1px">${c.balancePaid?'Paid ✓':'Required before final delivery'}</div>
+          </div>
+          ${hasBadge2?`<span style="font-size:9px;font-family:'DM Mono',monospace;padding:2px 8px;border-radius:20px;background:var(--gold);color:#000;font-weight:700;margin-right:6px">NEW</span>`:''}
+          <span id="inv2DropArrow" style="color:var(--text3);font-size:12px;transition:transform .2s;flex-shrink:0">▼</span>
+        </div>
+        <div id="inv2DropBody" style="display:none;padding:0 15px 14px;border-top:1px solid var(--border)">
+          <div style="padding-top:12px;font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:10px">The remaining 50% balance is due before your final high-res files are released. Pay via the link below to unlock delivery.</div>
+          ${c.invoiceLink2?`<a href="${c.invoiceLink2}" target="_blank" class="sl sl-g">💳 Pay 50% balance</a>`:'<p style="font-size:11px;color:var(--text3);font-family:\'DM Mono\',monospace">Invoice coming shortly.</p>'}
+          ${c.invDrive?`<a href="${c.invDrive}" target="_blank" class="sl sl-t" style="margin-top:6px">📎 Upload payment receipt</a>`:''}
+          ${c.invDrive?`<button onclick="clientNotify('${c.id}','${c.name}','balance_receipt')" style="margin-top:8px;width:100%;padding:9px;border-radius:9px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;letter-spacing:.04em">✓ I've uploaded my receipt</button>`:''}
+          ${c.balancePaid?`<div style="margin-top:8px;background:rgba(76,175,80,.06);border:1px solid rgba(76,175,80,.25);border-radius:9px;padding:10px 14px;font-size:12px;color:var(--success)">✓ Balance confirmed — finals ready for download</div>`:''}
+        </div>
+      </div>`;
       return lcards.map((l,i)=>`<div class="lcard${l.badge?' has-files':''}">
         <div class="lcard-icon">${l.icon}</div>
         <div class="lcard-inf"><div class="lcard-t">${l.t}</div><div class="lcard-s">${l.s}</div></div>
         ${l.badge?`<span class="lcard-badge">NEW</span>`:''}
         ${l.link?`<a href="${l.link}" target="_blank" class="lbtn">Open</a>`:'<span class="lbtn dis">Pending</span>'}
-      </div>${i===0?contractCard+invoiceCard:''}`).join('');
+      </div>
+      ${l.notify&&l.link?`<button onclick="clientNotify('${c.id}','${c.name}','${l.notify}')" style="width:100%;margin-bottom:6px;padding:9px;border-radius:9px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;letter-spacing:.04em">✓ I've uploaded my files — notify photographer</button>`:''}
+      ${l.inj==='contract+invoice1'?contractCard+invoice1Card:''}${l.inj==='invoice2'?invoice2Card:''}`).join('');
     })()}
   </div>
   ${dHtml?`<div class="pb-sec"><div class="pb-stl" style="margin-bottom:10px">Delivered Batches</div>${dHtml}</div>`:''}
@@ -1275,7 +1325,66 @@ function toast(msg,type){
 // ════════════════════════════════════
 // RENDER ALL
 // ════════════════════════════════════
-function renderAll(){renderStudio();}
+// ════════════════════════════════════
+// CLIENT ACTIVITY (client-submitted notifications)
+// ════════════════════════════════════
+const ACT_LABELS={
+  test_upload:'Uploaded test image',
+  selects_upload:'Uploaded selects — ready to retouch',
+  deposit_receipt:'Uploaded deposit receipt (50%)',
+  balance_receipt:'Uploaded balance receipt (50%)'
+};
+function getActivities(){
+  try{return JSON.parse(localStorage.getItem('prl_activity')||'[]');}catch{return[];}
+}
+function saveActivities(arr){localStorage.setItem('prl_activity',JSON.stringify(arr));}
+function clientNotify(clientId,clientName,type){
+  const acts=getActivities();
+  acts.unshift({id:uid(),clientId,clientName,type,ts:new Date().toISOString(),seen:false});
+  saveActivities(acts);
+  renderActivityList();
+  // Show a thank-you flash on the button
+  const btn=event.target;
+  const orig=btn.textContent;
+  btn.textContent='✓ Photographer notified!';
+  btn.style.color='var(--success)';
+  btn.style.borderColor='var(--success)';
+  setTimeout(()=>{btn.textContent=orig;btn.style.color='';btn.style.borderColor='';},2500);
+}
+function dismissActivity(id){
+  const acts=getActivities().filter(a=>a.id!==id);
+  saveActivities(acts);
+  renderActivityList();
+}
+function clearAllActivity(){
+  saveActivities([]);
+  renderActivityList();
+}
+function renderActivityList(){
+  const el=document.getElementById('activityList');
+  if(!el)return;
+  const acts=getActivities();
+  if(!acts.length){
+    el.innerHTML='<div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--text3);text-align:center;padding:14px 0">No client activity yet</div>';
+    return;
+  }
+  el.innerHTML=acts.map(a=>{
+    const ts=new Date(a.ts);
+    const when=ts.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    const label=ACT_LABELS[a.type]||a.type;
+    return `<div style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:6px">
+      <div style="flex-shrink:0;width:8px;height:8px;border-radius:50%;background:var(--gold)"></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:600;color:var(--text)">${a.clientName}</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:1px">${label}</div>
+        <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:2px">${when}</div>
+      </div>
+      <button onclick="dismissActivity('${a.id}')" style="font-size:10px;font-family:'DM Mono',monospace;padding:3px 9px;border-radius:20px;border:1px solid var(--border2);color:var(--text3);background:transparent;cursor:pointer;flex-shrink:0">Done</button>
+    </div>`;
+  }).join('');
+}
+
+function renderAll(){renderStudio();renderActivityList();}
 
 // ════════════════════════════════════
 // INIT
